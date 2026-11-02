@@ -35,12 +35,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wifi_analyzer import signal_color
+from wifi_analyzer import CHANNELS_BY_BAND, signal_color
 
 DEFAULT_INTERFACE = "wlx90de800c0cb6"
-CHANNEL_OPTIONS = ["2.4 GHz scan · channels 1–13"] + [
-    f"Channel {channel}" for channel in range(1, 14)
-]
 NETWORK_COLORS = (
     "#4778c7",
     "#c45b50",
@@ -339,11 +336,18 @@ class MainWindow(QMainWindow):
         self.interface_combo.addItem(DEFAULT_INTERFACE)
         self.interface_combo.setMinimumWidth(210)
         control_layout.addWidget(self.interface_combo)
+        self.band_combo = QComboBox()
+        self.band_combo.addItems(CHANNELS_BY_BAND)
+        self.band_combo.currentTextChanged.connect(self.update_band_view)
+        band_label = QLabel("Band")
+        band_label.setObjectName("muted")
+        control_layout.addWidget(band_label)
+        control_layout.addWidget(self.band_combo)
         channel_label = QLabel("Channels")
         channel_label.setObjectName("muted")
         control_layout.addWidget(channel_label)
         self.channel_combo = QComboBox()
-        self.channel_combo.addItems(CHANNEL_OPTIONS)
+        self.update_channel_options()
         self.channel_combo.setMinimumWidth(230)
         control_layout.addWidget(self.channel_combo)
         self.start_button = QPushButton("Start scan")
@@ -366,11 +370,11 @@ class MainWindow(QMainWindow):
         graph_layout = QVBoxLayout(graph_card)
         graph_layout.setContentsMargins(14, 12, 14, 8)
         graph_header = QHBoxLayout()
-        graph_title = QLabel("Channel graph · 2.4 GHz")
-        graph_title.setObjectName("section")
+        self.graph_title = QLabel()
+        self.graph_title.setObjectName("section")
         graph_subtitle = QLabel("Curve color matches network · higher means stronger signal")
         graph_subtitle.setObjectName("muted")
-        graph_header.addWidget(graph_title)
+        graph_header.addWidget(self.graph_title)
         graph_header.addStretch()
         graph_header.addWidget(graph_subtitle)
         graph_layout.addLayout(graph_header)
@@ -379,9 +383,7 @@ class MainWindow(QMainWindow):
         self.plot.showGrid(x=True, y=True, alpha=0.16)
         self.plot.setLabel("left", "Signal", units="dBm", color="#aab5c2")
         self.plot.setLabel("bottom", "Channel", color="#aab5c2")
-        self.plot.setXRange(1, 13, padding=0.02)
         self.plot.setYRange(-100, -30, padding=0.02)
-        self.plot.getAxis("bottom").setTicks([[(channel, str(channel)) for channel in range(1, 14)]])
         self.plot.getAxis("left").setTextPen("#aab5c2")
         self.plot.getAxis("bottom").setTextPen("#aab5c2")
         self.plot.getAxis("left").setPen("#465363")
@@ -434,6 +436,25 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(central, "WiFi Analyzer")
         self._build_sniffer_ui()
         self.setCentralWidget(self.tabs)
+        self.update_band_view()
+
+    def update_channel_options(self) -> None:
+        channels = CHANNELS_BY_BAND[self.band_combo.currentText()]
+        self.channel_combo.clear()
+        self.channel_combo.addItem("All channels", None)
+        for channel in channels:
+            self.channel_combo.addItem(f"Channel {channel}", channel)
+
+    def update_band_view(self) -> None:
+        band = self.band_combo.currentText()
+        channels = CHANNELS_BY_BAND[band]
+        self.update_channel_options()
+        self.graph_title.setText(f"Channel graph · {band}")
+        self.plot.setXRange(channels[0], channels[-1], padding=0.02)
+        self.plot.getAxis("bottom").setTicks(
+            [[(channel, str(channel)) for channel in channels]]
+        )
+        self.refresh_views()
 
     def _build_sniffer_ui(self) -> None:
         page = QWidget()
@@ -566,8 +587,12 @@ class MainWindow(QMainWindow):
             )
             return
 
-        selected = self.channel_combo.currentIndex()
-        channels = list(range(1, 14)) if selected == 0 else [selected]
+        selected_channel = self.channel_combo.currentData()
+        channels = (
+            list(CHANNELS_BY_BAND[self.band_combo.currentText()])
+            if selected_channel is None
+            else [int(selected_channel)]
+        )
         self.networks.clear()
         self.refresh_views()
         self.last_capture_error = ""
@@ -578,6 +603,7 @@ class MainWindow(QMainWindow):
         self.capture_thread.finished.connect(self.capture_finished)
         self.capture_thread.start()
         self.interface_combo.setEnabled(False)
+        self.band_combo.setEnabled(False)
         self.channel_combo.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -776,7 +802,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Scanning · passive capture")
         elif event_type == "channel":
             self.status_label.setText(
-                f"Scanning · channel {event.get('channel', '—')}"
+                f"Scanning {self.band_combo.currentText()} · channel {event.get('channel', '—')}"
             )
         elif event_type == "network":
             bssid = event.get("bssid")
@@ -792,6 +818,7 @@ class MainWindow(QMainWindow):
 
     def capture_finished(self) -> None:
         self.interface_combo.setEnabled(True)
+        self.band_combo.setEnabled(True)
         self.channel_combo.setEnabled(True)
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -822,6 +849,11 @@ class MainWindow(QMainWindow):
             for network in visible
             if network.get("bssid")
         }
+        selected_channels = set(CHANNELS_BY_BAND[self.band_combo.currentText()])
+        visible = [
+            network for network in visible
+            if int(network.get("channel") or 0) in selected_channels
+        ]
         visible.sort(
             key=lambda network: (
                 network.get("signal_dbm") is not None,
@@ -829,11 +861,10 @@ class MainWindow(QMainWindow):
             ),
             reverse=True,
         )
-        band_24 = [network for network in visible if 1 <= int(network.get("channel") or 0) <= 13]
         count_label = "network" if len(visible) == 1 else "networks"
         self.table_count.setText(f"{len(visible)} {count_label} · live")
         self._update_table(visible)
-        self._update_plot(band_24)
+        self._update_plot(visible)
 
     def _update_table(self, networks: list[dict[str, Any]]) -> None:
         self.table.setRowCount(len(networks))
@@ -861,18 +892,21 @@ class MainWindow(QMainWindow):
 
     def _update_plot(self, networks: list[dict[str, Any]]) -> None:
         self.plot.clear()
+        channels = CHANNELS_BY_BAND[self.band_combo.currentText()]
+        lower_limit, upper_limit = channels[0], channels[-1]
+        spread = 1.35 if self.band_combo.currentText() == "2.4 GHz" else 3.0
         for network in networks:
             channel = int(network.get("channel") or 0)
             signal = network.get("signal_dbm")
-            if not 1 <= channel <= 13 or signal is None:
+            if channel not in channels or signal is None:
                 continue
-            lower = max(1.0, channel - 3.0)
-            upper = min(13.0, channel + 3.0)
+            lower = max(float(lower_limit), channel - spread * 2)
+            upper = min(float(upper_limit), channel + spread * 2)
             steps = 60
             xs = [lower + (upper - lower) * index / steps for index in range(steps + 1)]
             ys = [
                 -100 + (max(-100, min(-25, signal)) + 100)
-                * math.exp(-((x - channel) ** 2) / (2 * 1.35**2))
+                * math.exp(-((x - channel) ** 2) / (2 * spread**2))
                 for x in xs
             ]
             color = QColor(self._network_color(str(network.get("bssid", ""))))

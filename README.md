@@ -14,13 +14,17 @@ It does not connect to networks or inject packets.
 | Manufacturer | Looked up from a local OUI database if one is installed; otherwise shown as Unknown. |
 | Security/encryption | Inferred from advertised information elements (for example Open, WEP, WPA2/CCMP). |
 | Signal icon colored green/yellow/red | Implemented in the network list. Thresholds: green ≥ −50 dBm; yellow −70 to −51 dBm; red < −70 dBm. |
-| Graph for the 13 channels | Implemented for 2.4 GHz channels 1–13. Each curve represents a detected network; its horizontal position is the channel and its height represents signal strength. |
+| Wi-Fi band and channel selection | Supports 2.4 GHz channels 1–13 and common 5 GHz channels. Availability depends on adapter support and the local regulatory domain. |
+| Channel graph | Shows networks and signal strength on the selected band; it visualizes observed networks, not actual channel utilization. |
 | Actual channel utilization | Not measured. The graph visualizes detected networks and channel overlap, not airtime or percentage utilization. Scanning is sequential, not simultaneous. |
 | Packet Sniffer | Implemented in a separate tab. Captures raw link-layer frames with Linux `AF_PACKET` and manually parses Ethernet/802.11, IPv4/IPv6, TCP, UDP, and TCP destination-port 80 ASCII payloads. |
 
 The application selects the USB adapter `wlx90de800c0cb6` by default. The
 integrated adapter `wlo1` can remain connected to Wi-Fi while the USB adapter
-is used for monitoring or packet capture.
+is used for monitoring or packet capture. In the WiFi Analyzer tab, select the
+2.4 GHz or 5 GHz band, then choose all channels in that band or an individual
+channel. Channels unavailable to the adapter or prohibited by the regulatory
+domain may be skipped during scanning.
 
 ## Install
 

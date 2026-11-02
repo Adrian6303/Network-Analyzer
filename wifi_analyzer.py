@@ -9,6 +9,21 @@ from typing import Any
 from scapy.layers.dot11 import Dot11, Dot11Beacon, Dot11Elt, Dot11ProbeResp, RadioTap
 
 
+CHANNELS_24_GHZ = tuple(range(1, 14))
+CHANNELS_5_GHZ = (
+    *range(36, 65, 4),
+    *range(100, 145, 4),
+    *range(149, 166, 4),
+)
+CHANNELS_BY_BAND = {
+    "2.4 GHz": CHANNELS_24_GHZ,
+    "5 GHz": CHANNELS_5_GHZ,
+}
+SUPPORTED_CHANNELS = frozenset(
+    channel for channels in CHANNELS_BY_BAND.values() for channel in channels
+)
+
+
 def signal_color(signal_dbm: int | None) -> str:
     if signal_dbm is None:
         return "#667085"

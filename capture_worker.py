@@ -12,11 +12,23 @@ from typing import Any
 
 from scapy.all import sniff
 
-from wifi_analyzer import load_oui_database, manufacturer_for_bssid, parse_management_frame
+from wifi_analyzer import (
+    SUPPORTED_CHANNELS,
+    load_oui_database,
+    manufacturer_for_bssid,
+    parse_management_frame,
+)
 
 
 def emit(event: dict[str, Any]) -> None:
     print(json.dumps(event, ensure_ascii=True), flush=True)
+
+
+def parse_channels(value: str) -> list[int]:
+    channels = [int(channel) for channel in value.split(",") if channel]
+    if not channels or any(channel not in SUPPORTED_CHANNELS for channel in channels):
+        raise ValueError("Selected channels must be supported 2.4 GHz or 5 GHz Wi-Fi channels.")
+    return channels
 
 
 def main() -> int:
@@ -25,9 +37,7 @@ def main() -> int:
         return 2
     interface = sys.argv[1]
     try:
-        channels = [int(value) for value in sys.argv[2].split(",") if value]
-        if not channels or any(channel < 1 or channel > 13 for channel in channels):
-            raise ValueError("Channel numbers must be between 1 and 13.")
+        channels = parse_channels(sys.argv[2])
     except ValueError as error:
         emit({"type": "error", "message": str(error)})
         return 2
